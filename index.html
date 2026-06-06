@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프로젝트 WBS & 간트차트 대시보드</title>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; background-color: #f8f9fa; color: #333; }
+        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-top: 0; }
+        .container { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
+        .info-text { background-color: #e8f4f8; padding: 15px; border-radius: 6px; font-size: 14px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        th, td { border: 1px solid #dee2e6; padding: 10px; text-align: center; vertical-align: middle; }
+        th { background-color: #3498db; color: white; font-weight: bold; }
+        .drag-handle { cursor: grab; font-size: 20px; color: #95a5a6; display: inline-block; padding: 5px; }
+        .drag-handle:active { cursor: grabbing; }
+        tr.dragging { background-color: #fef9e7 !important; opacity: 0.9; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        tr.dragging td { border-color: #f1c40f; }
+        input[type="text"], input[type="month"] { width: 90%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; font-family: inherit; }
+        button { background-color: #2ecc71; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: background-color 0.2s; }
+        button:hover { background-color: #27ae60; }
+        .btn-delete { background-color: #e74c3c; padding: 8px 12px;}
+        .btn-delete:hover { background-color: #c0392b; }
+        .btn-draw { background-color: #3498db; width: 100%; font-size: 16px; padding: 15px; margin-top: 10px; }
+        .btn-draw:hover { background-color: #2980b9; }
+        #chart_div { width: 100%; overflow-x: auto; min-height: 500px; border: 1px solid #eee; background: #fff; border-radius: 8px; padding: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📋 WBS 데이터 입력 및 관리 (순서 변경 가능)</h2>
+    <div class="info-text">
+        <strong>사용 안내:</strong><br>
+        1. <strong>[드래그]</strong> 표 가장 왼쪽의 <strong>'☰'</strong> 아이콘을 마우스로 끌어 표의 순서를 정리할 수 있습니다.<br>
+        2. <strong>[이해관계자/보고대상]</strong>을 입력하면 차트 막대의 색상이 해당 대상별로 그룹화되어 색칠됩니다.
+    </div>
+    
+    <table id="wbsTable">
+        <thead>
+            <tr>
+                <th style="width: 5%;">순서</th>
+                <th style="width: 10%;">WBS ID</th>
+                <th style="width: 25%;">작업 및 마일스톤 명</th>
+                <th style="width: 14%;">이해관계자/보고대상</th>
+                <th style="width: 12%;">시작 (연-월)</th>
+                <th style="width: 12%;">종료 (연-월)</th>
+                <th style="width: 14%;">선행 작업 (ID)</th>
+                <th style="width: 8%;">관리</th>
+            </tr>
+        </thead>
+        <tbody>
+            </tbody>
+    </table>
+    <button onclick="addRow()">➕ 새로운 작업 추가</button>
+    <button class="btn-draw" onclick="drawChart()">🔄 간트차트 렌더링 적용하기</button>
+</div>
+
+<div class="container">
+    <h2>📈 프로젝트 간트차트 뷰</h2>
+    <div id="chart_div"></div>
+</div>
+
+<script>
+    google.charts.load('current', {'packages':['gantt']});
+    google.charts.setOnLoadCallback(drawChart);
+
+    const initialData = [
+        ['WP 1.1', '프로젝트 헌장 작성', '-', '2026-01', '2026-02', ''],
+        ['M1', '🚩 [마일스톤 1] 프로젝트 공식 착수', 'NH농협손해보험', '2026-02', '2026-02', 'WP 1.1'],
+        ['WP 2.1a', '드론 용역 산출물', '-', '2026-03', '2026-06', 'M1'],
+        ['WP 2.1b', '데이터 분석 용역 산출물', '-', '2026-03', '2026-06', 'M1'],
+        ['WP 2.1c', 'DB 구축 용역 산출물', '-', '2026-03', '2026-06', 'M1'],
+        ['WP 2.1d', '교육 용역 산출물', '-', '2027-03', '2027-06', 'WP 2.4'],
+        ['WP 2.2', '프로토타입 현장 실측 결과물', '-', '2026-07', '2026-11', 'M1, WP 2.1'],
+        ['WP 2.3', '세부 프로세스(매뉴얼) 확립', '-', '2026-12', '2027-03', 'WP 2.2'],
+        ['WP 2.4', '시범사업 계획서 수립', '-', '2027-04', '2027-07', 'WP 2.3'],
+        ['M2', '🚩 [마일스톤 2] 시범사업 계획서 제출', '농업정책보험금융원', '2027-07', '2027-07', 'WP 2.4'],
+        ['Constraint', '⏳ [제약] 시범사업 계획서 승인 및 차년도 보험 판매 개시 대기', '-', '2027-08', '2028-02', 'M2'],
+        ['M3', '🚩 [마일스톤 3] 보험판매 개시', '-', '2028-03', '2028-03', 'Constraint'],
+        ['WP 3.1', '신규 프로세스 시범사업 운영 실적서', 'NH농협손해보험', '2028-03', '2028-11', 'M3'],
+        ['M4', '🚩 [마일스톤 4] 벼 손해평가 종료', '-', '2028-11', '2028-11', 'Constraint']
+        ['WP 4.1', '신규 손해평가 표준지침서 확립', '현업부서', '2028-11', '2028-12', 'WP 3.1'],
+        ['WP 4.2', '잔금 정산', '-', '2028-12', '2028-12', 'WP 3.1'],
+        ['WP 4.3', 'KPI 객관적 수치 증빙', '-', '2028-12', '2028-12']
+        ['WP 4.4', '사업평가서 작성', '-', '2028-12', '2029-01', 'WP 3.1, WP 4.1, WP 4.2, WP 4.3'],
+        ['M4', '🚩 [최종 마일스톤] 사업평가서 제출', '농림축산식품부', '2029-01', '2029-01', 'WP 4.4']
+    ];
+
+    function renderTable() {
+        const tbody = document.querySelector('#wbsTable tbody');
+        tbody.innerHTML = '';
+        initialData.forEach(row => addRowToTable(row[0], row[1], row[2], row[3], row[4], row[5]));
+        setupDragAndDrop();
+    }
+
+    function addRowToTable(id = '', name = '', stakeholder = '', start = '', end = '', dep = '') {
+        const tbody = document.querySelector('#wbsTable tbody');
+        const tr = document.createElement('tr');
+        tr.draggable = true;
+        
+        tr.innerHTML = `
+            <td><span class="drag-handle">☰</span></td>
+            <td><input type="text" class="t-id" value="${id}" placeholder="예: WP 1.2"></td>
+            <td><input type="text" class="t-name" value="${name}" placeholder="작업명"></td>
+            <td><input type="text" class="t-stakeholder" value="${stakeholder}" placeholder="보고대상/담당"></td>
+            <td><input type="month" class="t-start" value="${start}"></td>
+            <td><input type="month" class="t-end" value="${end}"></td>
+            <td><input type="text" class="t-dep" value="${dep}" placeholder="선행 ID"></td>
+            <td><button class="btn-delete" onclick="this.parentElement.parentElement.remove()">삭제</button></td>
+        `;
+        
+        addDragEventsToRow(tr);
+        tbody.appendChild(tr);
+    }
+
+    function addRow() { addRowToTable(); }
+
+    let draggedRow = null;
+    function addDragEventsToRow(row) {
+        row.addEventListener('dragstart', function(e) {
+            draggedRow = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.innerHTML); 
+        });
+        row.addEventListener('dragend', function() {
+            this.classList.remove('dragging');
+            draggedRow = null;
+        });
+    }
+
+    function setupDragAndDrop() {
+        const tbody = document.querySelector('#wbsTable tbody');
+        tbody.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const draggingRow = document.querySelector('.dragging');
+            if (!draggingRow) return;
+            const siblings = [...tbody.querySelectorAll('tr:not(.dragging)')];
+            let nextSibling = siblings.find(sibling => {
+                const rect = sibling.getBoundingClientRect();
+                return (e.clientY - rect.top - rect.height / 2) < 0; 
+            });
+            tbody.insertBefore(draggingRow, nextSibling);
+        });
+    }
+
+    function getLastDayOfMonth(year, month) {
+        return new Date(year, month, 0).getDate();
+    }
+
+    function drawChart() {
+        const data = new google.visualization.DataTable();
+        data.addColumn('string', 'Task ID');
+        data.addColumn('string', 'Task Name');
+        data.addColumn('string', 'Stakeholder'); 
+        data.addColumn('date', 'Start Date');
+        data.addColumn('date', 'End Date');
+        data.addColumn('number', 'Duration');
+        data.addColumn('number', 'Percent Complete');
+        data.addColumn('string', 'Dependencies');
+
+        const rows = document.querySelectorAll('#wbsTable tbody tr');
+        const taskList = [];
+
+        // 1. 테이블의 데이터 읽어오기
+        rows.forEach(row => {
+            const id = row.querySelector('.t-id').value.trim();
+            const name = row.querySelector('.t-name').value.trim();
+            const stakeholder = row.querySelector('.t-stakeholder').value.trim();
+            const startVal = row.querySelector('.t-start').value;
+            const endVal = row.querySelector('.t-end').value;
+            let dep = row.querySelector('.t-dep').value.trim() || null;
+
+            if (id && name && startVal && endVal) {
+                const startParts = startVal.split('-');
+                const endParts = endVal.split('-');
+                const startYear = parseInt(startParts[0]);
+                const startMonth = parseInt(startParts[1]);
+                const endYear = parseInt(endParts[0]);
+                const endMonth = parseInt(endParts[1]);
+
+                const startDate = new Date(startYear, startMonth - 1, 1);
+                const endDate = new Date(endYear, endMonth - 1, getLastDayOfMonth(endYear, endMonth));
+
+                let resource = stakeholder;
+                if (!resource) {
+                    resource = 'Task';
+                    if (id.includes('M') || name.includes('마일스톤')) resource = 'Milestone';
+                    if (name.includes('제약') || id.includes('Constraint')) resource = 'Constraint';
+                }
+
+                taskList.push({ id, name, resource, startDate, endDate, dep });
+            }
+        });
+
+        // 2. ✨ 에러(Crash) 자동 방어 로직 ✨
+        taskList.forEach(task => {
+            if (task.dep) {
+                const parent = taskList.find(t => t.id === task.dep);
+                
+                if (!parent) {
+                    // 방어 1: 입력한 선행 ID가 존재하지 않는 오타일 경우
+                    task.dep = null;
+                } else if (task.startDate < parent.endDate) {
+                    // 방어 2: 후행 작업이 선행 작업보다 일찍 시작하여 '시간 역행' 모순이 일어난 경우
+                    // 차트가 터지는 것을 막기 위해 이 작업의 화살표 연결만 무효화시킵니다.
+                    task.dep = null; 
+                }
+            }
+        });
+
+        // 3. 차트용 데이터 배열로 변환
+        const chartData = taskList.map(t => [t.id, t.name, t.resource, t.startDate, t.endDate, null, 100, t.dep]);
+
+        if (chartData.length === 0) {
+            document.getElementById('chart_div').innerHTML = '<p style="text-align:center; padding:50px;">데이터를 입력한 후 렌더링을 눌러주세요.</p>';
+            return;
+        }
+
+        data.addRows(chartData);
+
+        const options = {
+            height: chartData.length * 45 + 50,
+            gantt: {
+                trackHeight: 35,
+                labelStyle: { fontName: 'Malgun Gothic', fontSize: 13, color: '#333' },
+                innerGridTrack: { fill: '#fdfdfd' },
+                innerGridDarkTrack: { fill: '#f4f4f4' },
+                arrow: { angle: 100, width: 2, color: '#95a5a6', radius: 0 }
+            }
+        };
+
+        const chart = new google.visualization.Gantt(document.getElementById('chart_div'));
+        chart.draw(data, options);
+    }
+
+    renderTable();
+</script>
+</body>
+</html>
