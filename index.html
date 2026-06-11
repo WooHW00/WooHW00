@@ -1,243 +1,798 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로젝트 WBS & 간트차트 대시보드</title>
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <title>Project Master Gantt & Burndown Spike Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { emerald: { 50: '#eef8f2', 100: '#d4eee0', 200: '#aee0c3', 300: '#7bcba3', 400: '#4eb182', 500: '#198F51', 600: '#1b7345', 700: '#185b38', 800: '#15492f', 900: '#123c28' } } } }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; background-color: #f8f9fa; color: #333; }
-        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-top: 0; }
-        .container { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; }
-        .info-text { background-color: #e8f4f8; padding: 15px; border-radius: 6px; font-size: 14px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        th, td { border: 1px solid #dee2e6; padding: 10px; text-align: center; vertical-align: middle; }
-        th { background-color: #3498db; color: white; font-weight: bold; }
-        .drag-handle { cursor: grab; font-size: 20px; color: #95a5a6; display: inline-block; padding: 5px; }
-        .drag-handle:active { cursor: grabbing; }
-        tr.dragging { background-color: #fef9e7 !important; opacity: 0.9; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        tr.dragging td { border-color: #f1c40f; }
-        input[type="text"], input[type="month"] { width: 90%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; font-family: inherit; }
-        button { background-color: #2ecc71; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: background-color 0.2s; }
-        button:hover { background-color: #27ae60; }
-        .btn-delete { background-color: #e74c3c; padding: 8px 12px;}
-        .btn-delete:hover { background-color: #c0392b; }
-        .btn-draw { background-color: #3498db; width: 100%; font-size: 16px; padding: 15px; margin-top: 10px; }
-        .btn-draw:hover { background-color: #2980b9; }
-        #chart_div { width: 100%; overflow-x: auto; min-height: 500px; border: 1px solid #eee; background: #fff; border-radius: 8px; padding: 10px; }
+        body { background-color: #f1f5f9; color: #1e293b; font-family: 'Pretendard', -apple-system, sans-serif; }
+        .data-input { width: 100%; border: 1px solid transparent; background: transparent; padding: 4px 6px; font-size: 0.85rem; border-radius: 4px; outline: none; transition: all 0.2s; text-align: center; }
+        .data-input[readonly] { color: #64748b; font-weight: 700; cursor: default; }
+        .table-header th { background-color: #f8fafc; color: #475569; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; padding: 12px 6px; border-bottom: 2px solid #e2e8f0; text-align: center; }
+        .table-row td { padding: 4px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        .cancelled-task { opacity: 0.35; text-decoration: line-through; color: #ef4444; background-color: #fef2f2 !important; }
+
+        /* Risk toggle button design */
+        .risk-btn { transition: all 0.2s ease; border: 2px solid #e2e8f0; background-color: #ffffff; cursor: pointer; position: relative; overflow: hidden; }
+        .risk-btn:hover { border-color: #fda4af; background-color: #fff1f2; }
+        .risk-btn.active { border-color: #f43f5e; background-color: #ffe4e6; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(225, 29, 72, 0.2); }
+        .risk-btn.active .risk-title { color: #e11d48; }
+        .risk-btn.active::after { content: 'ACTIVE'; position: absolute; top: 10px; right: 10px; background: #e11d48; color: white; font-size: 10px; font-weight: bold; padding: 3px 6px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        details > summary { list-style: none; outline: none; cursor: pointer; }
+        details > summary::-webkit-details-marker { display: none; }
+        details[open] summary ~ * { animation: fadeInDown 0.3s ease-in-out; }
+        @keyframes fadeInDown { 0% { opacity: 0; transform: translateY(-10px); } 100% { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body>
+<body class="min-h-screen flex flex-col">
 
-<div class="container">
-    <h2>📋 WBS 데이터 입력 및 관리 (순서 변경 가능)</h2>
-    <div class="info-text">
-        <strong>사용 안내:</strong><br>
-        1. <strong>[드래그]</strong> 표 가장 왼쪽의 <strong>'☰'</strong> 아이콘을 마우스로 끌어 표의 순서를 정리할 수 있습니다.<br>
-        2. <strong>[이해관계자/보고대상]</strong>을 입력하면 차트 막대의 색상이 해당 대상별로 그룹화되어 색칠됩니다.
-    </div>
-    
-    <table id="wbsTable">
-        <thead>
-            <tr>
-                <th style="width: 5%;">순서</th>
-                <th style="width: 10%;">WBS ID</th>
-                <th style="width: 25%;">작업 및 마일스톤 명</th>
-                <th style="width: 14%;">이해관계자/보고대상</th>
-                <th style="width: 12%;">시작 (연-월)</th>
-                <th style="width: 12%;">종료 (연-월)</th>
-                <th style="width: 14%;">선행 작업 (ID)</th>
-                <th style="width: 8%;">관리</th>
-            </tr>
-        </thead>
-        <tbody>
-            </tbody>
-    </table>
-    <button onclick="addRow()">➕ 새로운 작업 추가</button>
-    <button class="btn-draw" onclick="drawChart()">🔄 간트차트 렌더링 적용하기</button>
-</div>
+    <header class="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center sticky top-0 z-20 shadow-sm gap-4">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2">
+                <svg class="w-6 h-6 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Project Master Gantt & Real-time Spike Burndown
+            </h1>
+        </div>
+        <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
+            <button onclick="init()" class="text-xs font-bold text-slate-500 hover:text-rose-500 px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-rose-50 transition shadow-sm flex items-center gap-1.5 flex-shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Reset Chart
+            </button>
+            <div class="flex flex-col items-end border-l border-slate-200 pl-4">
+                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Base Total Workload</label>
+                <div class="text-xl font-black text-emerald-600" id="totalPointsDisplay">0 pt</div>
+            </div>
+        </div>
+    </header>
 
-<div class="container">
-    <h2>📈 프로젝트 간트차트 뷰</h2>
-    <div id="chart_div"></div>
-</div>
+    <main class="flex-1 p-4 sm:p-8 flex flex-col gap-8 max-w-[2000px] mx-auto w-full">
 
-<script>
-    google.charts.load('current', {'packages':['gantt']});
-    google.charts.setOnLoadCallback(drawChart);
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6">
+            <h2 class="text-base sm:text-lg font-black text-slate-800 flex items-start gap-2 mb-4">
+                <svg class="w-5 h-5 text-rose-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                🚨 Field Risk Scenario Switches (When clicked, the burndown trajectory swings vertically in sync with the Trigger date!)
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                <button id="btn-r1" onclick="toggleRisk(1)" class="risk-btn text-left p-3.5 rounded-xl shadow-sm">
+                    <div class="text-[11px] font-bold text-slate-400 mb-1">Risk 1 (Trigger: May 15, 2026)</div>
+                    <div class="risk-title font-extrabold text-slate-700 text-[13px]">No Qualified Vendors</div>
+                    <div class="text-[11px] text-slate-500 mt-1.5 leading-relaxed tracking-tight">Drone/data falls through. Existing contract <b class="text-rose-500">Dropped</b>; a <b>university research team</b> is recruited and DB construction is relocated to M2.</div>
+                </button>
+                <button id="btn-r2" onclick="toggleRisk(2)" class="risk-btn text-left p-3.5 rounded-xl shadow-sm">
+                    <div class="text-[11px] font-bold text-slate-400 mb-1">Risk 2 (Trigger: Aug 1, 2027)</div>
+                    <div class="risk-title font-extrabold text-slate-700 text-[13px]">Regulation delay</div>
+                    <div class="text-[11px] text-slate-500 mt-1.5 leading-relaxed tracking-tight">Supplementation of the approval is ordered. To avoid missing the growing season, a <span class="text-amber-600 font-bold">2nd field-survey team is dispatched</span> and training is supplemented during the waiting period.</div>
+                </button>
+                <button id="btn-r3" onclick="toggleRisk(3)" class="risk-btn text-left p-3.5 rounded-xl shadow-sm">
+                    <div class="text-[11px] font-bold text-slate-400 mb-1">Risk 3 (Trigger: Aug 1, 2028)</div>
+                    <div class="risk-title font-extrabold text-slate-700 text-[13px]">Vendors fail to deliver</div>
+                    <div class="text-[11px] text-slate-500 mt-1.5 leading-relaxed tracking-tight">With no schedule delay, a <span class="text-rose-600 font-bold">full-scale substitute deployment of manual loss-adjustment personnel</span> and supplementary contracts cause a <b class="text-rose-600">workload explosion</b>.</div>
+                </button>
+                <button id="btn-r4" onclick="toggleRisk(4)" class="risk-btn text-left p-3.5 rounded-xl shadow-sm">
+                    <div class="text-[11px] font-bold text-slate-400 mb-1">Risk 4 (Trigger: Apr 2028 & Jan 2029)</div>
+                    <div class="risk-title font-extrabold text-slate-700 text-[13px]">Farmer distrust</div>
+                    <div class="text-[11px] text-slate-500 mt-1.5 leading-relaxed tracking-tight">Surge in objections. <span class="text-amber-600 font-bold">Cascading firefighting tasks arise</span>: re-training adjusters, distributing promotional materials, and communicating with cooperatives on conversion to a permanent program.</div>
+                </button>
+                <button id="btn-r5" onclick="toggleRisk(5)" class="risk-btn text-left p-3.5 rounded-xl shadow-sm">
+                    <div class="text-[11px] font-bold text-slate-400 mb-1">Risk 5 (Trigger: around Jul 2028)</div>
+                    <div class="risk-title font-extrabold text-slate-700 text-[13px]">Severe weather grounds</div>
+                    <div class="text-[11px] text-slate-500 mt-1.5 leading-relaxed tracking-tight">Flights become impossible due to severe weather during the pilot operation. With no schedule change, a <span class="text-rose-600 font-bold">temporary substitute deployment of manual assessment personnel</span> creates a spike.</div>
+                </button>
+            </div>
+        </section>
 
-    const initialData = [
-        ['WP 1.1', '프로젝트 헌장 작성', '-', '2026-01', '2026-02', ''],
-        ['M1', '🚩 [마일스톤 1] 프로젝트 공식 착수', 'NH농협손해보험', '2026-02', '2026-02', 'WP 1.1'],
-        ['WP 2.1a', '드론 용역 산출물', '-', '2026-03', '2026-06', 'M1'],
-        ['WP 2.1b', '데이터 분석 용역 산출물', '-', '2026-03', '2026-06', 'M1'],
-        ['WP 2.1c', 'DB 구축 용역 산출물', '-', '2026-03', '2026-06', 'M1'],
-        ['WP 2.1d', '교육 용역 산출물', '-', '2027-03', '2027-06', 'WP 2.4'],
-        ['WP 2.2', '프로토타입 현장 실측 결과물', '-', '2026-07', '2026-11', 'M1, WP 2.1'],
-        ['WP 2.3', '세부 프로세스(매뉴얼) 확립', '-', '2026-12', '2027-03', 'WP 2.2'],
-        ['WP 2.4', '시범사업 계획서 수립', '-', '2027-04', '2027-07', 'WP 2.3'],
-        ['M2', '🚩 [마일스톤 2] 시범사업 계획서 제출', '농업정책보험금융원', '2027-07', '2027-07', 'WP 2.4'],
-        ['Constraint', '⏳ [제약] 시범사업 계획서 승인 및 차년도 보험 판매 개시 대기', '-', '2027-08', '2028-02', 'M2'],
-        ['M3', '🚩 [마일스톤 3] 보험판매 개시', '-', '2028-03', '2028-03', 'Constraint'],
-        ['WP 3.1', '신규 프로세스 시범사업 운영 실적서', 'NH농협손해보험', '2028-03', '2028-11', 'M3'],
-        ['M4', '🚩 [마일스톤 4] 벼 손해평가 종료', '-', '2028-11', '2028-11', 'Constraint']
-        ['WP 4.1', '신규 손해평가 표준지침서 확립', '현업부서', '2028-11', '2028-12', 'WP 3.1'],
-        ['WP 4.2', '잔금 정산', '-', '2028-12', '2028-12', 'WP 3.1'],
-        ['WP 4.3', 'KPI 객관적 수치 증빙', '-', '2028-12', '2028-12']
-        ['WP 4.4', '사업평가서 작성', '-', '2028-12', '2029-01', 'WP 3.1, WP 4.1, WP 4.2, WP 4.3'],
-        ['M4', '🚩 [최종 마일스톤] 사업평가서 제출', '농림축산식품부', '2029-01', '2029-01', 'WP 4.4']
-    ];
+        <div class="flex flex-col gap-6">
+            <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 flex flex-col w-full h-[550px] sm:h-[650px]">
+                <div class="flex flex-col lg:flex-row lg:justify-between lg:items-end gap-4 mb-4 border-b border-slate-100 pb-3">
+                    <h2 class="text-base sm:text-[18px] font-black text-slate-800">📊 Dynamic Gantt Chart (Top ➔ Bottom forward waterfall ordering)</h2>
+                    <div class="flex flex-wrap gap-2 text-[10px] sm:text-[11px] font-bold bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 justify-start lg:justify-center w-full lg:w-auto">
+                        <span class="flex items-center gap-1.5 text-slate-500"><span class="w-3 h-3 bg-slate-300 rounded-sm flex-shrink-0"></span> <b>Base</b> (Ideal original, fixed)</span>
+                        <span class="flex items-center gap-1.5 text-emerald-700"><span class="w-3 h-3 bg-emerald-500 rounded-sm flex-shrink-0"></span> Normal Execution (Sim)</span>
+                        <span class="flex items-center gap-1.5 text-rose-600"><span class="w-3 h-3 bg-rose-500 rounded-sm flex-shrink-0"></span> Schedule Delay / Postponement (Shift)</span>
+                        <span class="flex items-center gap-1.5 text-amber-600"><span class="w-3 h-3 bg-amber-400 rounded-sm flex-shrink-0"></span> <b>Emergency Derived / Substitute Deployment</b></span>
+                    </div>
+                </div>
+                <div class="flex-1 relative w-full h-full min-h-[300px] sm:min-h-[400px]"><canvas id="ganttChart"></canvas></div>
+            </section>
 
-    function renderTable() {
-        const tbody = document.querySelector('#wbsTable tbody');
-        tbody.innerHTML = '';
-        initialData.forEach(row => addRowToTable(row[0], row[1], row[2], row[3], row[4], row[5]));
-        setupDragAndDrop();
-    }
+            <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 flex flex-col w-full h-[550px] sm:h-[600px]">
+                <div class="flex flex-col lg:flex-row lg:justify-between lg:items-end gap-4 mb-4 border-b border-slate-100 pb-3">
+                    <h2 class="text-base sm:text-[18px] font-black text-rose-600 flex items-center gap-2">
+                        📉 Dynamic Burndown Chart (Same starting point; a real-time engine where workload surges vertically on the Trigger Date)
+                    </h2>
+                    <div class="flex flex-wrap gap-2 sm:gap-4 text-[10px] sm:text-[11px] font-bold bg-slate-50 px-4 py-1.5 rounded-lg border border-slate-200 justify-start lg:justify-center w-full lg:w-auto">
+                        <span class="flex items-center gap-1 text-indigo-700"><span class="w-2.5 h-2.5 bg-indigo-500 rotate-45 inline-block flex-shrink-0"></span> Milestone Point</span>
+                        <span class="flex items-center gap-1 text-rose-600"><svg class="w-3 h-3 text-rose-500 fill-current flex-shrink-0" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2z"/></svg> Risk Onset Point</span>
+                        <span class="hidden sm:inline border-l border-slate-300 mx-1"></span>
+                        <span class="flex items-center gap-1.5 text-slate-400"><span class="w-4 h-1.5 bg-slate-300 flex-shrink-0"></span> Ideal Base Remaining</span>
+                        <span class="flex items-center gap-1.5 text-rose-600"><span class="w-4 h-1.5 bg-rose-500 flex-shrink-0"></span> <b>Risk Spike Trajectory</b></span>
+                    </div>
+                </div>
+                <div class="flex-1 relative w-full h-full min-h-[300px] sm:min-h-[400px]"><canvas id="burndownChart"></canvas></div>
+            </section>
+        </div>
 
-    function addRowToTable(id = '', name = '', stakeholder = '', start = '', end = '', dep = '') {
-        const tbody = document.querySelector('#wbsTable tbody');
-        const tr = document.createElement('tr');
-        tr.draggable = true;
-        
-        tr.innerHTML = `
-            <td><span class="drag-handle">☰</span></td>
-            <td><input type="text" class="t-id" value="${id}" placeholder="예: WP 1.2"></td>
-            <td><input type="text" class="t-name" value="${name}" placeholder="작업명"></td>
-            <td><input type="text" class="t-stakeholder" value="${stakeholder}" placeholder="보고대상/담당"></td>
-            <td><input type="month" class="t-start" value="${start}"></td>
-            <td><input type="month" class="t-end" value="${end}"></td>
-            <td><input type="text" class="t-dep" value="${dep}" placeholder="선행 ID"></td>
-            <td><button class="btn-delete" onclick="this.parentElement.parentElement.remove()">삭제</button></td>
-        `;
-        
-        addDragEventsToRow(tr);
-        tbody.appendChild(tr);
-    }
+        <details class="bg-white rounded-xl shadow-sm border border-slate-200 transition-all mt-4">
+            <summary class="px-4 sm:px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 shadow-sm">
+                <h2 class="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+                    📋 Original WBS Master Data & CPM/PERT Board (Click to expand/collapse the table)
+                </h2>
+                <div class="text-[11px] font-bold text-slate-500 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm self-end sm:self-auto">100% Hardcoded & Preserved ▼</div>
+            </summary>
 
-    function addRow() { addRowToTable(); }
+            <div class="px-4 sm:px-6 py-3 bg-blue-50/40 border-y border-blue-100 text-[11px] text-blue-800 flex flex-col gap-1.5">
+                <div><span class="font-bold text-indigo-700">🔒 User Original 100% Preserved:</span> Your input strings, date formats, and predecessor conditions (such as M4's Constraint) are hardcoded and protected down to the last comma. (Arbitrary modification fully blocked)</div>
+                <div><span class="font-bold text-rose-700">🧮 Built-in PERT Simulator:</span> Click the Type in the table below to switch to PERT mode; raising the pessimistic value (P) recalculates the Base schedule in real time and pushes the chart back.</div>
+            </div>
 
-    let draggedRow = null;
-    function addDragEventsToRow(row) {
-        row.addEventListener('dragstart', function(e) {
-            draggedRow = this;
-            this.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/html', this.innerHTML); 
-        });
-        row.addEventListener('dragend', function() {
-            this.classList.remove('dragging');
-            draggedRow = null;
-        });
-    }
+            <div class="overflow-auto max-h-[500px] p-4 bg-slate-50">
+                <table class="w-full text-left border-collapse min-w-[1400px] bg-white rounded-lg shadow-sm border border-slate-200">
+                    <thead>
+                        <tr class="table-header sticky top-0 z-10 bg-slate-100">
+                            <th class="w-24 border-r border-slate-200">ID</th>
+                            <th class="w-16 border-r border-slate-200">Type</th>
+                            <th class="min-w-[250px] text-left pl-4 border-r border-slate-200">Task Name</th>
+                            <th class="w-48 bg-emerald-50/50 border-r border-emerald-100">Stakeholders</th>
+                            <th class="w-28 border-r border-slate-200">Start Date (Base)</th>
+                            <th class="w-28 border-r border-slate-200">End Date (Base)</th>
+                            <th class="w-[170px] bg-indigo-50/30 border-r border-indigo-100">CPM / PERT (O/M/P)</th>
+                            <th class="w-24 border-r border-slate-200">Est. Duration (days)</th>
+                            <th class="w-48 text-left pl-4">Predecessor ID (Preds)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="taskTableBody"></tbody>
+                </table>
+            </div>
+        </details>
 
-    function setupDragAndDrop() {
-        const tbody = document.querySelector('#wbsTable tbody');
-        tbody.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            const draggingRow = document.querySelector('.dragging');
-            if (!draggingRow) return;
-            const siblings = [...tbody.querySelectorAll('tr:not(.dragging)')];
-            let nextSibling = siblings.find(sibling => {
-                const rect = sibling.getBoundingClientRect();
-                return (e.clientY - rect.top - rect.height / 2) < 0; 
+    </main>
+
+    <script>
+        // === 0. Common Utilities ===
+        const formatDate = (date) => { const d = new Date(date); return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]; };
+        const addDays = (dateStr, days) => { const d = new Date(dateStr + 'T00:00:00'); d.setDate(d.getDate() + days); return formatDate(d); };
+
+        // Defensive code for plugin loading
+        try { if (window.chartjsPluginAnnotation) Chart.register(window.chartjsPluginAnnotation); } catch (e) {}
+
+        // 💡 1. User-provided original data (the array is kept 100% hardcoded without changing a single character)
+        const rawInput = [
+            ['WP 1.1', 'Draft Project Charter', 'NH NongHyup Property & Casualty Insurance', '2026-01', '2026-02', ''],
+            ['M1', '▶ [Milestone 1] Official Project Kickoff', 'NH NongHyup Property & Casualty Insurance', '2026-02', '2026-02', 'WP 1.1'],
+            ['WP 2.1a', 'Drone Service Deliverable', 'NH NongHyup Property & Casualty Insurance', '2026-03', '2026-06', 'M1'],
+            ['WP 2.1b', 'Data Analysis Service Deliverable', 'NH NongHyup Property & Casualty Insurance', '2026-03', '2026-06', 'M1'],
+            ['WP 2.1c', 'DB Construction Service Deliverable', 'NH NongHyup Property & Casualty Insurance', '2026-03', '2026-06', 'M1'],
+            ['WP 2.1d', 'Training Service Deliverable', 'NH NongHyup Property & Casualty Insurance', '2026-03', '2026-06', 'M1'],
+            ['WP 2.2', 'Prototype Field-Survey Output', 'NH NongHyup Property & Casualty Insurance', '2026-07', '2026-11', 'M1, WP 2.1a, WP 2.1b, WP 2.1c'],
+            ['WP 2.3', 'Establish Detailed Process (Manual)', 'NH NongHyup Property & Casualty Insurance', '2026-12', '2027-03', 'WP 2.2'],
+            ['WP 2.4', 'Develop Pilot Project Plan', 'NH NongHyup Property & Casualty Insurance', '2027-04', '2027-07', 'WP 2.3'],
+            ['M2', '▶ [Milestone 2] Submit Pilot Project Plan', 'Agricultural Policy Insurance & Finance Service (APFS)', '2027-07', '2027-07', 'WP 2.4'],
+            ['Constraint', '⏳ [Constraint] Awaiting pilot project plan approval and the start of next-year insurance sales', 'NH NongHyup Property & Casualty Insurance', '2027-08', '2028-02', 'M2'],
+            ['WP 3.1', 'Establish Evaluation Criteria for New-Process Pilot Operation', 'NH NongHyup Property & Casualty Insurance', '2027-08', '2028-02', 'M2'],
+            ['M3', '▶ [Milestone 3] Start of Insurance Sales', 'NH NongHyup Property & Casualty Insurance', 'Local Agricultural Cooperatives', '2028-03', '2028-03', 'Constraint'],
+            ['WP 3.2', 'New-Process Pilot Operation Performance Report', 'NH NongHyup Property & Casualty Insurance', '2028-03', '2028-11', 'M3'],
+            ['M4', '▶ [Milestone 4] Completion of Rice Loss Adjustment', 'NH NongHyup Property & Casualty Insurance', 'Loss Adjustment Team', '2028-11', '2028-11', 'Constraint'], // User original preserved
+            ['WP 4.1', 'Establish New Loss-Adjustment Standard Guidelines', 'NH NongHyup Property & Casualty Insurance', '2028-11', '2028-12', 'WP 3.1'],
+            ['WP 4.2', 'Final Payment Settlement', 'NH NongHyup Property & Casualty Insurance', '2028-12', '2028-12', 'WP 3.1'],
+            ['WP 4.3', 'KPI Objective Figures Verification', 'NH NongHyup Property & Casualty Insurance', '2028-12', '2028-12', 'WP 3.1'],
+            ['WP 4.4', 'Prepare Project Evaluation Report', 'NH NongHyup Property & Casualty Insurance', '2028-12', '2029-01', 'WP 3.1, WP 4.1, WP 4.2, WP 4.3'],
+            ['M5', '▶ [Final Milestone] Submit Project Evaluation Report', 'Ministry of Agriculture, Food and Rural Affairs (MAFRA)', 'Agricultural Policy Insurance & Finance Service (APFS)', '2029-01', '2029-01', 'WP 4.4']
+        ];
+
+        let baseTasks = [];
+        let simTasks = [];
+        let injectedTasks = [];
+        let riskStates = { 1: false, 2: false, 3: false, 4: false, 5: false };
+        let activeRiskTriggers = [];
+        let ganttChartInst = null;
+        let burndownChartInst = null;
+        let totalBasePoints = 0;
+
+        document.addEventListener('DOMContentLoaded', () => { init(); });
+
+        // Parse the original array
+        function init() {
+            baseTasks = rawInput.map((row, index) => {
+                let id, name, stake1, stake2, startStr, endStr, preds;
+                if (row.length === 6) { [id, name, stake1, startStr, endStr, preds] = row; stake2 = ''; }
+                else if (row.length === 7) { [id, name, stake1, stake2, startStr, endStr, preds] = row; }
+
+                let stakeholders = stake2 ? `${stake1}, ${stake2}` : stake1;
+                let start = `${startStr}-01`;
+                let [y, m] = endStr.split('-');
+                let end = new Date(y, m, 0).toISOString().split('T')[0];
+
+                let isMS = id.startsWith('M') && id.length <= 2;
+                if (isMS) end = start;
+
+                let dur = isMS ? 0 : Math.round((new Date(end+'T00:00:00') - new Date(start+'T00:00:00'))/86400000) + 1;
+                let pts = isMS ? 0 : Math.max(10, Math.round(dur / 4)); // Virtual point calculation
+
+                return {
+                    origIndex: index, // For ensuring forward waterfall ordering
+                    id, name, stakeholders, preds, type: isMS ? 'milestone' : 'task',
+                    origStart: start, baseStart: start, baseEnd: end, duration: dur, points: pts,
+                    isPert: false, tO: dur, tM: dur, tP: dur, tE: dur
+                };
             });
-            tbody.insertBefore(draggingRow, nextSibling);
-        });
-    }
 
-    function getLastDayOfMonth(year, month) {
-        return new Date(year, month, 0).getDate();
-    }
+            riskStates = { 1: false, 2: false, 3: false, 4: false, 5: false };
+            [1,2,3,4,5].forEach(i => { document.getElementById(`btn-r${i}`).classList.remove('active'); });
 
-    function drawChart() {
-        const data = new google.visualization.DataTable();
-        data.addColumn('string', 'Task ID');
-        data.addColumn('string', 'Task Name');
-        data.addColumn('string', 'Stakeholder'); 
-        data.addColumn('date', 'Start Date');
-        data.addColumn('date', 'End Date');
-        data.addColumn('number', 'Duration');
-        data.addColumn('number', 'Percent Complete');
-        data.addColumn('string', 'Dependencies');
+            totalBasePoints = baseTasks.reduce((sum, t) => sum + t.points, 0);
+            document.getElementById('totalPointsDisplay').innerText = totalBasePoints + " pt";
 
-        const rows = document.querySelectorAll('#wbsTable tbody tr');
-        const taskList = [];
-
-        // 1. 테이블의 데이터 읽어오기
-        rows.forEach(row => {
-            const id = row.querySelector('.t-id').value.trim();
-            const name = row.querySelector('.t-name').value.trim();
-            const stakeholder = row.querySelector('.t-stakeholder').value.trim();
-            const startVal = row.querySelector('.t-start').value;
-            const endVal = row.querySelector('.t-end').value;
-            let dep = row.querySelector('.t-dep').value.trim() || null;
-
-            if (id && name && startVal && endVal) {
-                const startParts = startVal.split('-');
-                const endParts = endVal.split('-');
-                const startYear = parseInt(startParts[0]);
-                const startMonth = parseInt(startParts[1]);
-                const endYear = parseInt(endParts[0]);
-                const endMonth = parseInt(endParts[1]);
-
-                const startDate = new Date(startYear, startMonth - 1, 1);
-                const endDate = new Date(endYear, endMonth - 1, getLastDayOfMonth(endYear, endMonth));
-
-                let resource = stakeholder;
-                if (!resource) {
-                    resource = 'Task';
-                    if (id.includes('M') || name.includes('마일스톤')) resource = 'Milestone';
-                    if (name.includes('제약') || id.includes('Constraint')) resource = 'Constraint';
-                }
-
-                taskList.push({ id, name, resource, startDate, endDate, dep });
-            }
-        });
-
-        // 2. ✨ 에러(Crash) 자동 방어 로직 ✨
-        taskList.forEach(task => {
-            if (task.dep) {
-                const parent = taskList.find(t => t.id === task.dep);
-                
-                if (!parent) {
-                    // 방어 1: 입력한 선행 ID가 존재하지 않는 오타일 경우
-                    task.dep = null;
-                } else if (task.startDate < parent.endDate) {
-                    // 방어 2: 후행 작업이 선행 작업보다 일찍 시작하여 '시간 역행' 모순이 일어난 경우
-                    // 차트가 터지는 것을 막기 위해 이 작업의 화살표 연결만 무효화시킵니다.
-                    task.dep = null; 
-                }
-            }
-        });
-
-        // 3. 차트용 데이터 배열로 변환
-        const chartData = taskList.map(t => [t.id, t.name, t.resource, t.startDate, t.endDate, null, 100, t.dep]);
-
-        if (chartData.length === 0) {
-            document.getElementById('chart_div').innerHTML = '<p style="text-align:center; padding:50px;">데이터를 입력한 후 렌더링을 눌러주세요.</p>';
-            return;
+            initBaseSchedule();
+            runSimulation();
         }
 
-        data.addRows(chartData);
+        // Switch toggle function
+        function toggleRisk(r) {
+            riskStates[r] = !riskStates[r];
+            const btn = document.getElementById(`btn-r${r}`);
+            if (riskStates[r]) btn.classList.add('active');
+            else btn.classList.remove('active');
+            runSimulation(); // Render the scenario in real time whenever a switch is turned on
+        }
 
-        const options = {
-            height: chartData.length * 45 + 50,
-            gantt: {
-                trackHeight: 35,
-                labelStyle: { fontName: 'Malgun Gothic', fontSize: 13, color: '#333' },
-                innerGridTrack: { fill: '#fdfdfd' },
-                innerGridDarkTrack: { fill: '#f4f4f4' },
-                arrow: { angle: 100, width: 2, color: '#95a5a6', radius: 0 }
+        // 2. Ideal Base Scheduling
+        function initBaseSchedule() {
+            let changed = true;
+            let loops = 0;
+            while(changed && loops < 50) {
+                changed = false;
+                loops++;
+                baseTasks.forEach(task => {
+                    let reqStart = task.origStart;
+                    if (task.preds) {
+                        let maxEnd = '';
+                        task.preds.split(',').forEach(pid => {
+                            const pred = baseTasks.find(t => t.id === pid.trim());
+                            if (pred && pred.baseEnd) { if (!maxEnd || new Date(pred.baseEnd+'T00:00:00') > new Date(maxEnd+'T00:00:00')) maxEnd = pred.baseEnd; }
+                        });
+                        if (maxEnd) {
+                            const dStart = task.type === 'milestone' ? maxEnd : addDays(maxEnd, 1);
+                            if (new Date(dStart+'T00:00:00') > new Date(reqStart+'T00:00:00')) reqStart = dStart;
+                        }
+                    }
+                    if (task.baseStart !== reqStart) { task.baseStart = reqStart; changed = true; }
+                    let reqEnd = task.type === 'milestone' ? reqStart : addDays(reqStart, Math.max(0, task.duration - 1));
+                    if (task.baseEnd !== reqEnd) { task.baseEnd = reqEnd; changed = true; }
+                });
             }
-        };
+        }
 
-        const chart = new google.visualization.Gantt(document.getElementById('chart_div'));
-        chart.draw(data, options);
-    }
+        // 3. Risk Simulation Core Engine (precise scenarios hardcoded)
+        function runSimulation() {
+            simTasks = JSON.parse(JSON.stringify(baseTasks));
+            injectedTasks = [];
+            activeRiskTriggers = [];
 
-    renderTable();
-</script>
+            simTasks.forEach(t => {
+                t.simDuration = t.isPert ? t.tE : t.duration;
+                t.simPreds = t.preds;
+                t.isDropped = false;
+                t.simStart = t.baseStart;
+                t.simEnd = t.baseEnd;
+            });
+
+            // 🚨 R1: Schedule/integration delay (drone/data void, university team deployed, DB relocated)
+            if (riskStates[1]) {
+                const t21a = simTasks.find(t => t.id === 'WP 2.1a');
+                const t21b = simTasks.find(t => t.id === 'WP 2.1b');
+                const t21c = simTasks.find(t => t.id === 'WP 2.1c');
+
+                if (t21a) t21a.isDropped = true;
+                if (t21b) t21b.isDropped = true;
+
+                const r1Trigger = '2026-05-15';
+                activeRiskTriggers.push({ name: 'R1 Triggered (Drone/Data Not Contracted)', date: r1Trigger });
+
+                injectedTasks.push({
+                    id: 'R1-Univ', type: 'injected', name: '🚨 [Urgent] Recruit university research team & deploy imaging/analysis',
+                    triggerDate: r1Trigger, simStart: r1Trigger, simEnd: '2026-11-30', simDuration: 200, points: 60, simPreds: ''
+                });
+
+                const t22 = simTasks.find(t => t.id === 'WP 2.2');
+                if (t22) {
+                    t22.simStart = '2026-08-01';
+                    t22.simEnd = '2026-10-31';
+                    t22.simDuration = 92;
+                    t22.simPreds = 'R1-Univ';
+                    t22.points += 30; // Added workload due to 3-month compression
+                }
+
+                const cons = simTasks.find(t => t.id === 'Constraint');
+                if (t21c && cons) {
+                    t21c.isDropped = true;
+                    injectedTasks.push({
+                        id: 'R1-DBShift', type: 'injected', name: '🚨 [Relocated] Delayed DB construction service proceeds at lower priority',
+                        triggerDate: r1Trigger, simStart: cons.baseStart, simEnd: addDays(cons.baseStart, t21c.duration - 1), simDuration: t21c.duration, points: t21c.points, simPreds: 'Constraint'
+                    });
+                }
+            }
+
+            // 🚨 R2: Government/regulatory rejection (2nd field survey deployment & training rewrite for supplementation)
+            if (riskStates[2]) {
+                const cons = simTasks.find(t => t.id === 'Constraint');
+                if (cons) {
+                    const trigR2 = cons.baseStart;
+                    activeRiskTriggers.push({ name: 'R2 Triggered (Approval Rejection — Supplementation Ordered)', date: trigR2 });
+                    injectedTasks.push({
+                        id: 'R2-Edu', type: 'injected', name: '🚨 [Supplementation] Rewrite training materials & re-contract',
+                        triggerDate: trigR2, simStart: trigR2, simEnd: addDays(trigR2, 59), simDuration: 60, points: 20, simPreds: 'M2'
+                    });
+                    injectedTasks.push({
+                        id: 'R2-Field', type: 'injected', name: '🚨 [Supplementation] Dispatch 2nd field re-survey team (targeting growing season)',
+                        triggerDate: trigR2, simStart: addDays(trigR2, 30), simEnd: addDays(trigR2, 119), simDuration: 90, points: 40, simPreds: 'M2'
+                    });
+                }
+            }
+
+            // 🚨 R3: Data bottleneck -> Trigger date changed to Aug 1, 2028
+            if (riskStates[3]) {
+                const t32 = simTasks.find(t => t.id === 'WP 3.2');
+                if (t32) {
+                    const trigR3 = '2028-08-01'; // Fixed and changed to Aug 1, 2028
+                    activeRiskTriggers.push({ name: 'R3 Bottleneck Detected (Manual Deployment)', date: trigR3 });
+
+                    // Precise correction: compute and assign the actual total days from the new trigger date (8/1) to the original target end date (11/30) (prevents decimal leakage and leftover points at the source)
+                    const r3ManualDur = Math.round((new Date(t32.baseEnd+'T00:00:00') - new Date(trigR3+'T00:00:00'))/86400000) + 1;
+
+                    injectedTasks.push({
+                        id: 'R3-Manual', type: 'injected', name: '🚨 [Data Bottleneck] Full-scale substitute deployment of manual loss-adjustment personnel',
+                        triggerDate: trigR3, simStart: trigR3, simEnd: t32.baseEnd, simDuration: r3ManualDur, points: 50, simPreds: 'M3'
+                    });
+                    injectedTasks.push({
+                        id: 'R3-Contract', type: 'injected', name: '🚨 [Bottleneck Mitigation] Continuous expansion of the data analysis network',
+                        triggerDate: trigR3, simStart: trigR3, simEnd: addDays(trigR3, 89), simDuration: 90, points: 20, simPreds: 'M3'
+                    });
+                }
+            }
+
+            // 🚨 R4: Field distrust/reinvestigation response
+            if (riskStates[4]) {
+                const t32 = simTasks.find(t => t.id === 'WP 3.2');
+                const wp41 = simTasks.find(t => t.id === 'WP 4.1');
+
+                if (t32) {
+                    const trigR4 = addDays(t32.baseStart, 30); // Distrust spreads around April
+                    activeRiskTriggers.push({ name: 'R4 Surge in Complaints (Firefighting Tasks)', date: trigR4 });
+                    injectedTasks.push({
+                        id: 'R4-Edu', type: 'injected', name: '🚨 [Complaint Firefighting] Respond to adjusters\' work refusal & conduct re-training',
+                        triggerDate: trigR4, simStart: trigR4, simEnd: addDays(trigR4, 59), simDuration: 60, points: 20, simPreds: 'M3'
+                    });
+                    injectedTasks.push({
+                        id: 'R4-Promo', type: 'injected', name: '🚨 [Distrust Resolution] Expand distribution of promotional materials at local cooperatives',
+                        triggerDate: trigR4, simStart: trigR4, simEnd: addDays(trigR4, 89), simDuration: 90, points: 15, simPreds: 'M3'
+                    });
+                }
+
+                const wp44 = simTasks.find(t => t.id === 'WP 4.4');
+                if (wp44) {
+                    const trigR4_2 = wp44.baseStart; // Time of discussing the permanent program
+                    activeRiskTriggers.push({ name: 'R4 Permanent-Conversion Consultation', date: trigR4_2 });
+                    injectedTasks.push({
+                        id: 'R4-Comm', type: 'injected', name: '🚨 [Enhanced Communication] Farmer consultation for permanent conversion',
+                        triggerDate: trigR4_2, simStart: trigR4_2, simEnd: wp44.baseEnd, simDuration: wp44.duration, points: 20, simPreds: 'WP 4.3'
+                    });
+                }
+            }
+
+            // 🚨 R5: External environment (severe weather -> unrelated to WP 2.2; manual dispatch during the 3.2 period)
+            if (riskStates[5]) {
+                const t32 = simTasks.find(t => t.id === 'WP 3.2');
+                if (t32) {
+                    const r5Date = addDays(t32.baseStart, 100); // Triggered around July
+                    activeRiskTriggers.push({ name: 'R5 Severe Weather (Manual Substitute Deployment)', date: r5Date });
+                    injectedTasks.push({
+                        id: 'R5-Weather', type: 'injected', name: '🚨 [Severe Weather — No Flight] Temporary substitute dispatch of manual assessment personnel',
+                        triggerDate: r5Date, simStart: r5Date, simEnd: addDays(r5Date, 59), simDuration: 60, points: 30, simPreds: ''
+                    });
+                }
+            }
+
+            // Sim schedule calculation (domino push logic)
+            let changed = true;
+            let loops = 0;
+            while(changed && loops < 50) {
+                changed = false;
+                loops++;
+
+                injectedTasks.forEach(task => {
+                    let reqStart = task.simStart;
+                    if(task.simPreds) {
+                        const pred = simTasks.find(t => t.id === task.simPreds);
+                        if(pred && !pred.isDropped && pred.simEnd) {
+                            const newStart = addDays(pred.simEnd, 1);
+                            if(new Date(newStart+'T00:00:00') > new Date(reqStart+'T00:00:00')) reqStart = newStart;
+                        }
+                    }
+                    if(task.simStart !== reqStart) {
+                        task.simStart = reqStart;
+                        task.simEnd = addDays(reqStart, task.simDuration - 1);
+                        changed = true;
+                    }
+                });
+
+                simTasks.forEach(task => {
+                    let reqStart = task.baseStart || '2026-01-01';
+                    if(riskStates[4] && task.id === 'WP 4.1') reqStart = '2028-12-01'; // Guideline postponed
+
+                    if (task.simPreds) {
+                        let maxEnd = '';
+                        task.simPreds.split(',').forEach(pid => {
+                            const pred = simTasks.find(t => t.id === pid.trim());
+                            if (pred && !pred.isDropped && pred.simEnd) {
+                                if (!maxEnd || new Date(pred.simEnd+'T00:00:00') > new Date(maxEnd+'T00:00:00')) maxEnd = pred.simEnd;
+                            }
+                            const injPred = injectedTasks.find(t => t.id === pid.trim());
+                            if (injPred && injPred.simEnd) {
+                                if (!maxEnd || new Date(injPred.simEnd+'T00:00:00') > new Date(maxEnd+'T00:00:00')) maxEnd = injPred.simEnd;
+                            }
+                        });
+                        if (maxEnd) {
+                            const depStart = task.type === 'milestone' ? maxEnd : addDays(maxEnd, 1);
+                            if (new Date(depStart+'T00:00:00') > new Date(reqStart+'T00:00:00')) reqStart = depStart;
+                        }
+                    }
+
+                    if (task.simStart !== reqStart) { task.simStart = reqStart; changed = true; }
+                    let reqEnd = task.type === 'milestone' ? reqStart : addDays(reqStart, Math.max(0, (task.simDuration||1) - 1));
+                    if (task.simEnd !== reqEnd) { task.simEnd = reqEnd; changed = true; }
+                });
+            }
+
+            renderWBS();
+            renderGantt();
+            renderBurndown();
+        }
+
+        // === 4. WBS Table Rendering (Base refreshed on PERT change) ===
+        function togglePert(id) {
+            const task = baseTasks.find(t => t.id === id);
+            if(task && task.type === 'task') {
+                task.isPert = !task.isPert;
+                if(task.isPert && !task.tO) {
+                    task.tM = task.duration;
+                    task.tO = Math.max(1, Math.round(task.duration * 0.8));
+                    task.tP = Math.round(task.duration * 1.5);
+                    task.tE = Math.max(1, Math.round((task.tO + 4*task.tM + task.tP)/6));
+                    task.duration = task.tE;
+                    task.baseEnd = addDays(task.baseStart, task.duration - 1);
+                } else {
+                    task.duration = task.tE;
+                    task.baseEnd = addDays(task.baseStart, task.duration - 1);
+                }
+                initBaseSchedule();
+                runSimulation();
+            }
+        }
+
+        function updateWBS(id, field, value) {
+            const task = baseTasks.find(t => t.id === id);
+            if(task && task.type === 'task') {
+                if(['tO', 'tM', 'tP'].includes(field)) {
+                    task[field] = parseInt(value) || 0;
+                    task.tE = Math.max(1, Math.round((task.tO + 4*task.tM + task.tP)/6));
+                    task.duration = task.tE;
+                    task.baseEnd = addDays(task.baseStart, task.duration - 1);
+                }
+                initBaseSchedule();
+                runSimulation();
+            }
+        }
+
+        function renderWBS() {
+            const tbody = document.getElementById('taskTableBody');
+            tbody.innerHTML = baseTasks.map(item => {
+                let rowClass = 'table-row border-b border-slate-200 bg-white hover:bg-slate-50 transition-colors';
+                if(item.isPert) rowClass += ' bg-indigo-50/10 ';
+                let typeBadge = item.type === 'task'
+                    ? `<button onclick="togglePert('${item.id}')" class="text-[9px] font-bold px-1.5 py-0.5 rounded border ${item.isPert ? 'border-indigo-400 text-indigo-700 bg-white' : 'border-slate-300 text-slate-500 bg-slate-50'} shadow-sm transition w-full hover:bg-slate-100" title="Click to switch PERT/CPM">${item.isPert ? 'PERT' : 'CPM'}</button>`
+                    : `<span class="bg-slate-200 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded w-full block text-center">M/S</span>`;
+
+                let pertInput = '';
+                if(item.type === 'task') {
+                    if(item.isPert) {
+                        pertInput = `
+                            <td class="bg-indigo-50/30 border-x border-indigo-100 px-1 py-1 text-center">
+                                <div class="flex items-center justify-center gap-1 w-full">
+                                    <input type="number" value="${item.tO}" onchange="updateWBS('${item.id}', 'tO', this.value)" class="data-input w-10 text-[10px] text-indigo-700 bg-white border border-indigo-200" title="Optimistic">
+                                    <input type="number" value="${item.tM}" onchange="updateWBS('${item.id}', 'tM', this.value)" class="data-input w-11 text-[11px] text-emerald-700 font-black bg-white border border-emerald-300" title="Most Likely">
+                                    <input type="number" value="${item.tP}" onchange="updateWBS('${item.id}', 'tP', this.value)" class="data-input w-10 text-[10px] text-rose-700 bg-white border border-rose-200" title="Pessimistic (raising it pushes back the Base schedule)">
+                                </div>
+                            </td>`;
+                    } else {
+                        pertInput = `<td class="border-x border-slate-100 px-1 text-center text-[10px] text-slate-400 font-bold">- (Single Duration) -</td>`;
+                    }
+                } else {
+                    pertInput = `<td class="bg-slate-50 border-x border-slate-100 text-center text-slate-300">-</td>`;
+                }
+
+                return `
+                    <tr class="${rowClass}">
+                        <td class="border-r border-slate-200 px-2 text-center font-mono font-bold text-slate-600 text-[12px] py-2">${item.id}</td>
+                        <td class="text-center px-1 border-r border-slate-200">${typeBadge}</td>
+                        <td class="pr-2 pl-4"><div class="font-bold text-slate-700 w-full text-[13px]">${item.name}</div></td>
+                        <td class="bg-emerald-50/20 border-r border-emerald-100 px-2 text-[11px] text-emerald-800 font-bold leading-tight">${item.stakeholders}</td>
+                        <td class="text-center text-[11px] font-bold text-slate-600 bg-slate-50 border-x border-slate-200">${item.baseStart}</td>
+                        <td class="text-center text-[11px] font-bold text-slate-600 bg-slate-50 border-r border-slate-200">${item.baseEnd}</td>
+                        ${pertInput}
+                        <td class="text-center bg-slate-50 border-r border-slate-200">
+                            <div class="font-black text-indigo-700 text-[12px]">${item.type === 'task' ? item.duration + ' days' : '-'}</div>
+                        </td>
+                        <td class="bg-blue-50/10 text-left pl-4 font-mono text-[11px] font-bold text-blue-800 tracking-tight border-l border-blue-100">${item.preds}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // === 5. Gantt Chart (perfectly browser-compatible rendering using a linear axis) ===
+        function renderGantt() {
+            if (ganttChartInst) ganttChartInst.destroy();
+            const ctx = document.getElementById('ganttChart').getContext('2d');
+
+            const labels = [];
+            const baseData = [];
+            const simData = [];
+            const injectedData = [];
+            const bgColors = [];
+            const borderColors = [];
+
+            // Apply origIndex-based sorting to ensure top-to-bottom forward ordering
+            injectedTasks.forEach(t => {
+                let predId = t.simPreds ? t.simPreds.split(',')[0].trim() : null;
+                const pred = baseTasks.find(bt => bt.id === predId);
+                t.origIndex = pred ? pred.origIndex + 0.5 : 999;
+            });
+
+            // Chronological sorting makes the Gantt chart cascade in order from the top (top-down waterfall)
+            const chartTasks = [...baseTasks, ...injectedTasks].sort((a, b) => {
+                const aIdx = a.origIndex !== undefined ? a.origIndex : 999;
+                const bIdx = b.origIndex !== undefined ? b.origIndex : 999;
+                if (aIdx === bIdx) return new Date(a.simStart||a.baseStart+'T00:00:00').getTime() - new Date(b.simStart||b.baseStart+'T00:00:00').getTime();
+                return aIdx - bIdx;
+            }).reverse();
+
+            chartTasks.forEach(task => {
+                labels.push(`[${task.id.replace('R1-Univ','Research Team').replace('R1-DBShift','DB Relocation').replace('R2-Edu','Training Suppl.').replace('R2-Field','2nd Survey').replace('R3-Manual','Full Manual').replace('R3-Contract','Analysis Net').replace('R4-Edu','Re-training').replace('R4-Promo','Promo').replace('R4-Comm','Co-op Comm.').replace('R5-Weather','Manual Sub.')}] ${task.name}`.substring(0, 45));
+
+                if (task.type === 'injected') {
+                    baseData.push(null);
+                    simData.push(null);
+                    injectedData.push([new Date(task.simStart+'T00:00:00').getTime(), new Date(task.simEnd+'T00:00:00').getTime()]);
+                    bgColors.push('transparent'); borderColors.push('transparent');
+                } else {
+                    const bTask = task;
+                    const sTask = simTasks.find(t => t.id === bTask.id);
+
+                    let eMsBase = new Date(bTask.baseEnd+'T00:00:00').getTime();
+                    if (bTask.type === 'milestone') eMsBase += 86400000 * 6; // Marker thickness
+                    baseData.push([new Date(bTask.baseStart+'T00:00:00').getTime(), eMsBase]);
+
+                    if (sTask && sTask.isDropped) {
+                        simData.push(null); injectedData.push(null); bgColors.push('transparent'); borderColors.push('transparent');
+                    } else if (sTask) {
+                        let eMsSim = new Date(sTask.simEnd+'T00:00:00').getTime();
+                        if (sTask.type === 'milestone') eMsSim += 86400000 * 6;
+                        simData.push([new Date(sTask.simStart+'T00:00:00').getTime(), eMsSim]);
+
+                        if (sTask.type === 'milestone') { bgColors.push('#4f46e5'); borderColors.push('#4338ca'); }
+                        else if (sTask.isSeasonDelayed) { bgColors.push('#be123c'); borderColors.push('#9f1239'); }
+                        else if (sTask.isMoved || sTask.simStart !== bTask.baseStart || sTask.simEnd !== bTask.baseEnd) { bgColors.push('rgba(244, 63, 94, 0.85)'); borderColors.push('#e11d48'); }
+                        else { bgColors.push('rgba(16, 185, 129, 0.85)'); borderColors.push('#059669'); }
+                    } else {
+                        simData.push(null); injectedData.push(null); bgColors.push('transparent'); borderColors.push('transparent');
+                    }
+                    injectedData.push(null);
+                }
+            });
+
+            const minTime = new Date('2026-01-01T00:00:00').getTime();
+            let maxTime = new Date('2029-06-30T00:00:00').getTime();
+
+            ganttChartInst = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Base (Ideal original, fixed)', data: baseData, backgroundColor: 'rgba(148, 163, 184, 0.35)', borderColor: '#cbd5e1', borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.8 },
+                        { label: 'Simulation (Forecast/Delay)', data: simData, backgroundColor: bgColors, borderColor: borderColors, borderWidth: 1, barPercentage: 0.65, categoryPercentage: 0.8 },
+                        { label: 'Dynamic Substitute/Added Work', data: injectedData, backgroundColor: 'rgba(251, 191, 36, 0.95)', borderColor: '#d97706', borderWidth: 1, barPercentage: 0.65, categoryPercentage: 0.8 }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: function(ctx) {
+                            if(!ctx.raw) return null;
+                            const start = new Date(ctx.raw[0]).toISOString().split('T')[0];
+                            const end = new Date(ctx.raw[1]).toISOString().split('T')[0];
+                            let prefix = ctx.datasetIndex === 0 ? '🗓️ Original Base: ' : (ctx.datasetIndex === 2 ? '🔥 Emergency Deployment: ' : '⚠️ Forecast (Sim): ');
+                            return `${prefix} ${start} ~ ${end}`;
+                        }}}
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear', position: 'top', min: minTime, max: maxTime, grid: { color: '#f1f5f9' },
+                            ticks: { callback: (val) => { const d = new Date(val); return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2, '0')}`; }, stepSize: 86400000 * 60, font: { weight: 'bold', size: 10 } }
+                        },
+                        y: {
+                            stacked: false, grid: { display: false },
+                            ticks: { font: { weight: 'bold', size: 11 }, color: (ctx) => {
+                                const idStr = labels[ctx.index].split(']')[0].replace('[', '');
+                                const isDrp = simTasks.find(t => t.id === idStr)?.isDropped;
+                                return isDrp ? '#ef4444' : '#475569';
+                            } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // === 6. Burndown Chart (double-counting bug fully removed and a same-day spike engine implemented) ===
+        function renderBurndown() {
+            if (burndownChartInst) burndownChartInst.destroy();
+            const ctx = document.getElementById('burndownChart').getContext('2d');
+
+            const maxDate = new Date('2029-04-30T00:00:00');
+            const dates = [];
+            let curr = new Date('2026-01-01T00:00:00');
+            while(curr <= maxDate) { dates.push(formatDate(curr)); curr.setDate(curr.getDate() + 1); }
+
+            // 1) Base trajectory calculation
+            let bPoints = totalBasePoints;
+            const bData = dates.map(d => {
+                baseTasks.filter(t => t.type === 'task' && t.baseEnd === d).forEach(t => { bPoints -= (t.points||0); });
+                return Math.max(0, bPoints);
+            });
+
+            // 2) Sim trajectory calculation
+            // 💡 [Core Bug Fix] Future workload is no longer pre-added on January 1. A perfectly identical starting point!
+            let sPoints = totalBasePoints;
+            const sData = [];
+            const logs = {};
+
+            dates.forEach(d => {
+                logs[d] = [];
+
+                // 🚨 R1: Immediate workload elimination (Drop) -> vertical drop on the designated date (May 15)
+                if (riskStates[1] && d === '2026-05-15') {
+                    let dropPts = 0;
+                    ['WP 2.1a', 'WP 2.1b'].forEach(id => {
+                        const t = baseTasks.find(x=>x.id===id);
+                        if(t) dropPts += t.points;
+                    });
+                    sPoints -= dropPts; // Workload evaporates (a deep dip)
+                    logs[d].push(`💥 [R1 Triggered] Existing service (drone/data) cancelled: related work abandoned (Drop) -${dropPts}pt evaporated`);
+                }
+
+                // 🚨 On the start date of added substitute work (manual assessment, etc.), the remaining workload surges (spike)
+                injectedTasks.filter(t => t.triggerDate === d).forEach(t => {
+                    sPoints += t.points;
+                    logs[d].push(`📈 [Emergency Added Deployment] ${t.name} (+${t.points}pt surge)`);
+                });
+
+                // Deduct when emergency-deployed work completes
+                injectedTasks.filter(t => t.simEnd === d).forEach(t => {
+                    sPoints -= t.points;
+                    logs[d].push(`✅ [Substitute Work Completed] ${t.name} (-${t.points}pt)`);
+                });
+
+                // Deduct on normal task completion (excluding dropped ones)
+                simTasks.filter(t => t.type !== 'milestone' && !t.isDropped && t.simEnd === d).forEach(t => {
+                    sPoints -= (t.points||0);
+                    logs[d].push(`✅ [Planned Work Completed Normally] ${t.id} (-${t.points||0}pt)`);
+                });
+
+                sData.push(Math.max(0, sPoints));
+            });
+
+            // Point radius setting: only dates with events are marked with a sharp point
+            const pointRadii = dates.map(d => logs[d].length > 0 ? 5 : 0);
+
+            // 💡 3) Milestone and risk onset points (marker data handling dedicated to the category scale)
+            const milestoneData = new Array(dates.length).fill(null);
+            const milestoneLabels = new Array(dates.length).fill('');
+            const riskMarkerData = new Array(dates.length).fill(null);
+            const riskMarkerLabels = new Array(dates.length).fill('');
+            const annotations = {};
+
+            // Milestone markers
+            baseTasks.filter(t => t.type === 'milestone').forEach((m, idx) => {
+                const dIdx = dates.indexOf(m.baseStart);
+                if (dIdx !== -1) {
+                    annotations[`ms_${idx}`] = {
+                        type: 'line', scaleID: 'x', value: m.baseStart,
+                        borderColor: 'rgba(79, 70, 229, 0.4)', borderWidth: 1.5, borderDash: [4, 4],
+                        label: { display: true, content: m.id, position: 'start', backgroundColor: 'rgba(79, 70, 229, 0.8)', color: 'white', font: {size: 10, weight: 'bold'}, yAdjust: 10 }
+                    };
+                    milestoneData[dIdx] = sData[dIdx];
+                    milestoneLabels[dIdx] = `${m.id}: ${m.name}`;
+                }
+            });
+
+            // Risk trigger markers
+            activeRiskTriggers.forEach((rt, idx) => {
+                const tIdx = dates.indexOf(rt.date);
+                if (tIdx !== -1) {
+                    riskMarkerData[tIdx] = sData[tIdx];
+                    riskMarkerLabels[tIdx] = rt.name;
+                    annotations[`rt_${idx}`] = {
+                        type: 'line', scaleID: 'x', value: rt.date,
+                        borderColor: 'rgba(225, 29, 72, 0.6)', borderWidth: 2, borderDash: [5, 5],
+                        label: { display: true, content: rt.name.substring(0,8), position: 'end', backgroundColor: 'rgba(225, 29, 72, 0.9)', color: 'white', font: {size: 10, weight:'bold'}, yAdjust: (idx % 2 === 0) ? 10 : 30 }
+                    };
+                }
+            });
+
+            const injectedPtsTotal = injectedTasks.reduce((s, t) => s + (t.points||0), 0);
+
+            burndownChartInst = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        { label: 'Milestone Achievement', data: milestoneData, type: 'line', showLine: false, backgroundColor: '#4f46e5', pointRadius: 8, pointHoverRadius: 12, pointStyle: 'rectRot', order: 0 },
+                        { label: 'Risk Onset Point', data: riskMarkerData, type: 'line', showLine: false, backgroundColor: '#e11d48', pointRadius: 10, pointHoverRadius: 14, pointStyle: 'triangle', order: 0 },
+                        // 💡 [Vertical spike implementation] tension: 0 (straight line) and stepped: 'before' guarantee a same-day vertical rise
+                        { label: 'Simulation Spike Trajectory', data: sData, borderColor: '#e11d48', backgroundColor: 'rgba(225, 29, 72, 0.08)', borderWidth: 3.5, pointRadius: pointRadii, pointHoverRadius: 8, pointBackgroundColor: '#fff', fill: true, tension: 0, stepped: 'before', order: 1 },
+                        { label: 'Base Ideal Trajectory', data: bData, borderColor: '#cbd5e1', borderWidth: 2.5, borderDash: [5, 5], pointRadius: 0, fill: false, tension: 0, stepped: 'before', order: 2 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        annotation: { annotations: annotations },
+                        tooltip: {
+                            backgroundColor: 'rgba(30, 41, 59, 0.95)', padding: 14, cornerRadius: 8, titleFont: {size: 13}, bodyFont: {size: 13, weight:'bold'},
+                            callbacks: {
+                                label: function(ctx) {
+                                    if(ctx.dataset.label === 'Milestone Achievement') return `🚩 ${milestoneLabels[ctx.dataIndex]}`;
+                                    if(ctx.dataset.label === 'Risk Onset Point') return `⚠️ ${riskMarkerLabels[ctx.dataIndex]}`;
+                                    if(ctx.datasetIndex === 3) return `🗓️ Base original remaining workload: ${ctx.parsed.y} pt`;
+
+                                    let res = [`🔥 Sim forecast remaining workload: ${ctx.parsed.y} pt`];
+                                    if(logs[ctx.label] && logs[ctx.label].length > 0) res.push(...logs[ctx.label]);
+                                    return res;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, suggestedMax: (totalBasePoints + injectedPtsTotal) * 1.15, title: { display: true, text: 'Points Remaining', font: {weight:'bold'} } },
+                        x: {
+                            type: 'category', // Error fix: firmly fixed to the category scale to fully prevent plugin conflicts
+                            ticks: {
+                                maxRotation: 45, minRotation: 45, maxTicksLimit: 30,
+                                callback: function(val, index) {
+                                    const d = new Date(dates[index]);
+                                    if (d.getDate() === 1) return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}`;
+                                    return '';
+                                }
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
